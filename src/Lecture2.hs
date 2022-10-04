@@ -1,3 +1,6 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
+
 {- |
 Module                  : Lecture2
 Copyright               : (c) 2021-2022 Haskell Beginners 2022 Course
@@ -16,29 +19,28 @@ Unlike exercises to Lecture 1, this module also contains more
 challenging exercises. You don't need to solve them to finish the
 course but you can if you like challenges :)
 -}
+module Lecture2 (
+  -- * Normal
+  lazyProduct,
+  duplicate,
+  removeAt,
+  evenLists,
+  dropSpaces,
+  Knight (..),
+  dragonFight,
 
-module Lecture2
-    ( -- * Normal
-      lazyProduct
-    , duplicate
-    , removeAt
-    , evenLists
-    , dropSpaces
+  -- * Hard
+  isIncreasing,
+  merge,
+  mergeSort,
+  Expr (..),
+  Variables,
+  EvalError (..),
+  eval,
+  constantFolding,
+) where
 
-    , Knight (..)
-    , dragonFight
-
-      -- * Hard
-    , isIncreasing
-    , merge
-    , mergeSort
-
-    , Expr (..)
-    , Variables
-    , EvalError (..)
-    , eval
-    , constantFolding
-    ) where
+import Data.Char (isSpace)
 
 -- VVV If you need to import libraries, do it after this line ... VVV
 
@@ -52,7 +54,11 @@ zero, you can stop calculating product and return 0 immediately.
 84
 -}
 lazyProduct :: [Int] -> Int
-lazyProduct = error "TODO"
+lazyProduct = go 1
+ where
+  go acc [] = acc
+  go _ (0 : _) = 0
+  go acc (x : xs) = go (x * acc) xs
 
 {- | Implement a function that duplicates every element in the list.
 
@@ -62,7 +68,8 @@ lazyProduct = error "TODO"
 "ccaabb"
 -}
 duplicate :: [a] -> [a]
-duplicate = error "TODO"
+duplicate (x : xs) = x : x : duplicate xs
+duplicate [] = []
 
 {- | Implement function that takes index and a list and removes the
 element at the given position. Additionally, this function should also
@@ -74,7 +81,14 @@ return the removed element.
 >>> removeAt 10 [1 .. 5]
 (Nothing,[1,2,3,4,5])
 -}
-removeAt = error "TODO"
+removeAt :: Int -> [a] -> (Maybe a, [a])
+removeAt n xs | n < 0 = (Nothing, xs)
+removeAt n xs = (x, l <> r')
+ where
+  (l, r) = splitAt n xs
+  (x, r') = headSafe r
+  headSafe [] = (Nothing, [])
+  headSafe (a : as) = (Just a, as)
 
 {- | Write a function that takes a list of lists and returns only
 lists of even lengths.
@@ -85,7 +99,8 @@ lists of even lengths.
 ♫ NOTE: Use eta-reduction and function composition (the dot (.) operator)
   in this function.
 -}
-evenLists = error "TODO"
+evenLists :: [[a]] -> [[a]]
+evenLists = filter (even . length)
 
 {- | The @dropSpaces@ function takes a string containing a single word
 or number surrounded by spaces and removes all leading and trailing
@@ -101,7 +116,8 @@ spaces.
 
 🕯 HINT: look into Data.Char and Prelude modules for functions you may use.
 -}
-dropSpaces = error "TODO"
+dropSpaces :: String -> String
+dropSpaces = takeWhile (not . isSpace) . dropWhile isSpace
 
 {- |
 
@@ -158,14 +174,97 @@ You're free to define any helper functions.
 -}
 
 -- some help in the beginning ;)
+
 data Knight = Knight
-    { knightHealth    :: Int
-    , knightAttack    :: Int
-    , knightEndurance :: Int
-    }
+  { knightHealth :: Int
+  , knightAttack :: Int
+  , knightEndurance :: Int
+  }
 
-dragonFight = error "TODO"
+data Chest a = Chest
+  { gold :: Int
+  , treasure :: Maybe a
+  }
 
+data DragonType = Black | Green | Red
+data Dragon a = Dragon
+  { dragonType :: DragonType
+  , dragonFirePower :: Int
+  , dragonHealth :: Int
+  , swallowedChest :: Chest a
+  }
+
+data FightResult a
+  = KnightWins (Chest a) Int
+  | KnightDies
+  | KnightTired
+
+dragonToExperience :: DragonType -> Int
+dragonToExperience = \case
+  Red -> 100
+  Black -> 150
+  Green -> 250
+
+dragonFight :: Dragon a -> Knight -> FightResult a
+dragonFight d k = goKnight d k
+ where
+  goKnight d k = case attackKnight d k of
+    Stop fr -> fr
+    KeepGoing d' k' -> goDragon d' k'
+  goDragon d k = case attackDragon d k of
+    Stop fr -> fr
+    KeepGoing d' k' -> goKnight d' k'
+
+data AttackResult a
+  = Stop (FightResult a)
+  | KeepGoing (Dragon a) Knight
+
+attackKnight :: Dragon a -> Knight -> AttackResult a
+attackKnight d@Dragon{..} k@Knight{..}
+  | knightEndurance == 0 = Stop KnightTired
+  | remainingLife > 0 = KeepGoing d' k'
+  | otherwise = Stop $ KnightWins swallowedChest (dragonToExperience dragonType)
+ where
+  maxHits = max 10 knightEndurance
+  damage = maxHits * knightAttack
+  remainingLife = dragonHealth - damage
+  k' = k{knightEndurance = knightEndurance - maxHits}
+  d' = d{dragonHealth = remainingLife}
+
+attackDragon :: Dragon a -> Knight -> AttackResult a
+attackDragon d@Dragon{..} k@Knight{..}
+  | remainingLife <= 0 = Stop KnightDies
+  | otherwise = KeepGoing d k'
+ where
+  remainingLife = knightHealth - dragonFirePower
+  k' = k{knightHealth = remainingLife}
+
+{-
+Use GADTs to make illegal states unrepresentable
+
+data DragonType = Red | Green | Black
+data Chest (t :: DragonType) a where
+  GreenChest :: Int -> Chest Green a
+  RedChest :: Int -> a -> Chest Red a
+  BlackChest :: Int -> a -> Chest Black a
+
+data Dragon (t :: DragonType) a = Dragon
+  { dragonFirePower :: Int
+  , dragonHealth :: Int
+  , dragonChest :: Chest t a
+  }
+
+data FightResult a
+  = forall t. KnightWins (Chest t a) Int
+  | KnightDies
+  | KnightRunsAway
+
+-- How would I know the specific 't' to get the corresponding experience?
+-- Only idea that comes to mind is pattern matching on dragonChest to
+-- discover the actual type 't'
+dragonToExperience :: Dragon t a -> Int
+dragonToExperience d = undefined
+-}
 ----------------------------------------------------------------------------
 -- Extra Challenges
 ----------------------------------------------------------------------------
@@ -185,7 +284,15 @@ False
 True
 -}
 isIncreasing :: [Int] -> Bool
-isIncreasing = error "TODO"
+isIncreasing [] = True
+isIncreasing (x : xs) = go x xs
+ where
+  go _ [] = True
+  go prev (a : as)
+    | prev > a = False
+    | otherwise = go a as
+
+-- Is it still tail-recursive when using guards?
 
 {- | Implement a function that takes two lists, sorted in the
 increasing order, and merges them into new list, also sorted in the
@@ -198,7 +305,11 @@ verify that.
 [1,2,3,4,7]
 -}
 merge :: [Int] -> [Int] -> [Int]
-merge = error "TODO"
+merge as [] = as
+merge [] bs = bs
+merge (a : as) (b : bs)
+  | a <= b = a : merge as (b : bs)
+  | otherwise = b : merge (a : as) bs
 
 {- | Implement the "Merge Sort" algorithm in Haskell. The @mergeSort@
 function takes a list of numbers and returns a new list containing the
@@ -215,8 +326,13 @@ The algorithm of merge sort is the following:
 [1,2,3]
 -}
 mergeSort :: [Int] -> [Int]
-mergeSort = error "TODO"
-
+mergeSort [] = []
+mergeSort [x] = [x]
+mergeSort xs =
+  let (l, r) = splitAt (length xs `div` 2) xs
+      sl = mergeSort l
+      sr = mergeSort r
+   in merge sl sr
 
 {- | Haskell is famous for being a superb language for implementing
 compilers and interpeters to other programming languages. In the next
@@ -229,10 +345,10 @@ Such expressions can be represented in a more structured way (than a
 string) using the following recursive Algebraic Data Type:
 -}
 data Expr
-    = Lit Int
-    | Var String
-    | Add Expr Expr
-    deriving (Show, Eq)
+  = Lit Int
+  | Var String
+  | Add Expr Expr
+  deriving (Show, Eq)
 
 {- Now, you can use this data type to describe such expressions:
 
@@ -260,15 +376,23 @@ Normally, this would be a sum type with several constructors
 describing all possible errors. But we have only one error in our
 evaluation process.
 -}
-data EvalError
-    = VariableNotFound String
-    deriving (Show, Eq)
+newtype EvalError
+  = VariableNotFound String
+  deriving (Show, Eq)
 
 {- | Having all this set up, we can finally implement an evaluation function.
 It returns either a successful evaluation result or an error.
 -}
 eval :: Variables -> Expr -> Either EvalError Int
-eval = error "TODO"
+eval vars = \case
+  Lit n -> Right n
+  Var s -> case lookup s vars of
+    Nothing -> Left $ VariableNotFound s
+    Just n -> Right n
+  Add ex ex' -> do
+    r <- eval vars ex
+    r' <- eval vars ex'
+    pure $ r + r'
 
 {- | Compilers also perform optimizations! One of the most common
 optimizations is "Constant Folding". It performs arithmetic operations
@@ -292,4 +416,21 @@ Write a function that takes and expression and performs "Constant
 Folding" optimization on the given expression.
 -}
 constantFolding :: Expr -> Expr
-constantFolding = error "TODO"
+constantFolding e = case extractConstants e of
+  (Just expr, 0) -> expr
+  (Just expr, n) -> Add expr (Lit n)
+  (Nothing, n) -> Lit n
+
+extractConstants :: Expr -> (Maybe Expr, Int)
+extractConstants = \case
+  Lit n -> (Nothing, n)
+  Var s -> (Just $ Var s, 0)
+  Add e1 e2 ->
+    let (e1', n) = extractConstants e1
+        (e2', n') = extractConstants e2
+     in (combineMaybes Add e1' e2', n + n')
+
+combineMaybes :: (a -> a -> a) -> Maybe a -> Maybe a -> Maybe a
+combineMaybes _ Nothing b = b
+combineMaybes _ a Nothing = a
+combineMaybes f (Just a) (Just b) = Just $ f a b
