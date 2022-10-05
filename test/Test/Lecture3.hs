@@ -1,39 +1,47 @@
 {-# OPTIONS_GHC -Wno-type-defaults #-}
 
-module Test.Lecture3
-    ( lecture3Spec
-    ) where
+module Test.Lecture3 (
+    lecture3Spec,
+) where
 
 import Hedgehog (Gen)
 import Hedgehog.Classes (foldableLaws, functorLaws, lawsCheck, monoidLaws, semigroupLaws)
 import Test.Hspec (Spec, describe, it, shouldBe, shouldReturn)
 
-import Lecture3 (Gold (..), List1 (..), Reward (..), Treasure (..), Weekday (..), appendDiff3,
-                 daysTo, next, toShortString)
+import Lecture3 (
+    Gold (..),
+    List1 (..),
+    Reward (..),
+    Treasure (..),
+    Weekday (..),
+    appendDiff3,
+    daysTo,
+    next,
+    toShortString,
+ )
 
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 
-
 lecture3Spec :: Spec
 lecture3Spec = describe "Lecture 3" $ do
     describe "toShortString" $ do
-        it "Monday"    $ toShortString Monday    `shouldBe` "Mon"
-        it "Tuesday"   $ toShortString Tuesday   `shouldBe` "Tue"
+        it "Monday" $ toShortString Monday `shouldBe` "Mon"
+        it "Tuesday" $ toShortString Tuesday `shouldBe` "Tue"
         it "Wednesday" $ toShortString Wednesday `shouldBe` "Wed"
-        it "Thursday"  $ toShortString Thursday  `shouldBe` "Thu"
-        it "Friday"    $ toShortString Friday    `shouldBe` "Fri"
-        it "Saturday"  $ toShortString Saturday  `shouldBe` "Sat"
-        it "Sunday"    $ toShortString Sunday    `shouldBe` "Sun"
+        it "Thursday" $ toShortString Thursday `shouldBe` "Thu"
+        it "Friday" $ toShortString Friday `shouldBe` "Fri"
+        it "Saturday" $ toShortString Saturday `shouldBe` "Sat"
+        it "Sunday" $ toShortString Sunday `shouldBe` "Sun"
 
     describe "next" $ do
-        it "Monday"    $ next Monday    `shouldBe` Tuesday
-        it "Tuesday"   $ next Tuesday   `shouldBe` Wednesday
+        it "Monday" $ next Monday `shouldBe` Tuesday
+        it "Tuesday" $ next Tuesday `shouldBe` Wednesday
         it "Wednesday" $ next Wednesday `shouldBe` Thursday
-        it "Thursday"  $ next Thursday  `shouldBe` Friday
-        it "Friday"    $ next Friday    `shouldBe` Saturday
-        it "Saturday"  $ next Saturday  `shouldBe` Sunday
-        it "Sunday"    $ next Sunday    `shouldBe` Monday
+        it "Thursday" $ next Thursday `shouldBe` Friday
+        it "Friday" $ next Friday `shouldBe` Saturday
+        it "Saturday" $ next Saturday `shouldBe` Sunday
+        it "Sunday" $ next Sunday `shouldBe` Monday
 
     describe "daysTo" $ do
         it "Monday -> Friday" $ daysTo Monday Friday `shouldBe` 4
@@ -57,7 +65,7 @@ lecture3Spec = describe "Lecture 3" $ do
         it "Laws: Semigroup" $
             lawsCheck (semigroupLaws genList1) `shouldReturn` True
         it "Includes first element of second list" $
-            List1 1  [2,3] <> List1 4 [5, 6] `shouldBe` List1 1 [2, 3, 4, 5, 6]
+            List1 1 [2, 3] <> List1 4 [5, 6] `shouldBe` List1 1 [2, 3, 4, 5, 6]
 
     describe "Treasure" $ do
         it "Laws: Semigroup" $
@@ -77,10 +85,6 @@ lecture3Spec = describe "Lecture 3" $ do
         it "Checks duplicates only for original values" $
             appendDiff3 [1] [2] [1, 2] `shouldBe` [1, 2, 1, 2]
 
-{-
-
-!!! UNCOMMENT THE FOLLOWING SECTION FOR FOLDABLE/FUNCTOR TESTS !!!
-
     describe "Laws: Foldable" $ do
         it "List1" $ do
             lawsCheck (foldableLaws genList1With) `shouldReturn` True
@@ -92,7 +96,6 @@ lecture3Spec = describe "Lecture 3" $ do
             lawsCheck (functorLaws genList1With) `shouldReturn` True
         it "Treasure" $ do
             lawsCheck (functorLaws genTreasureWith) `shouldReturn` True
--}
 
 genSmallInt :: Gen Int
 genSmallInt = Gen.int (Range.linear 0 10)
@@ -113,7 +116,8 @@ genList1With :: Gen a -> Gen (List1 a)
 genList1With gen = List1 <$> gen <*> Gen.list (Range.linear 0 10) gen
 
 genTreasureWith :: Gen a -> Gen (Treasure a)
-genTreasureWith gen = Gen.frequency
-    [ (1, pure NoTreasure)
-    , (3, SomeTreasure <$> gen)
-    ]
+genTreasureWith gen =
+    Gen.frequency
+        [ (1, pure NoTreasure)
+        , (3, SomeTreasure <$> gen)
+        ]
