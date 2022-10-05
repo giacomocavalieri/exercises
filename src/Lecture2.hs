@@ -1,6 +1,3 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE GADTs #-}
-
 {- |
 Module                  : Lecture2
 Copyright               : (c) 2021-2022 Haskell Beginners 2022 Course
@@ -181,32 +178,49 @@ data Knight = Knight
   , knightEndurance :: Int
   }
 
-data Chest a = Chest
-  { gold :: Int
-  , treasure :: Maybe a
+data Chest a = Chest Int (Maybe a)
+
+data DragonStats = DragonStats
+  { dragonFirePower :: Int
+  , dragonHealth :: Int
   }
 
-data DragonType = Black | Green | Red
-data Dragon a = Dragon
-  { dragonType :: DragonType
-  , dragonFirePower :: Int
-  , dragonHealth :: Int
-  , swallowedChest :: Chest a
-  }
+data Dragon a
+  = Red DragonStats (Chest a)
+  | Black DragonStats (Chest a)
+  | Green DragonStats Int
 
 data FightResult a
-  = KnightWins (Chest a) Int
+  = KnightWins (Maybe a, Int) Int
   | KnightDies
   | KnightTired
 
-dragonToExperience :: DragonType -> Int
+dragonToExperience :: Dragon a -> Int
 dragonToExperience = \case
-  Red -> 100
-  Black -> 150
-  Green -> 250
+  Red _ _ -> 100
+  Black _ _ -> 150
+  Green _ _ -> 250
+
+dragonStats :: Dragon a -> DragonStats
+dragonStats = \case
+  Red s _ -> s
+  Black s _ -> s
+  Green s _ -> s
+
+updateStats :: DragonStats -> Dragon a -> Dragon a
+updateStats s = \case
+  Red _ c -> Red s c
+  Black _ c -> Black s c
+  Green _ g -> Green s g
+
+dragonToPrize :: Dragon a -> (Maybe a, Int)
+dragonToPrize = \case
+  Red _ (Chest g t) -> (t, g)
+  Black _ (Chest g t) -> (t, g)
+  Green _ g -> (Nothing, g)
 
 dragonFight :: Dragon a -> Knight -> FightResult a
-dragonFight d k = goKnight d k
+dragonFight = goKnight
  where
   goKnight d k = case attackKnight d k of
     Stop fr -> fr
@@ -220,51 +234,27 @@ data AttackResult a
   | KeepGoing (Dragon a) Knight
 
 attackKnight :: Dragon a -> Knight -> AttackResult a
-attackKnight d@Dragon{..} k@Knight{..}
+attackKnight d k@Knight{..}
   | knightEndurance == 0 = Stop KnightTired
   | remainingLife > 0 = KeepGoing d' k'
-  | otherwise = Stop $ KnightWins swallowedChest (dragonToExperience dragonType)
+  | otherwise = Stop $ KnightWins (dragonToPrize d) (dragonToExperience d)
  where
+  stats@DragonStats{..} = dragonStats d
   maxHits = max 10 knightEndurance
   damage = maxHits * knightAttack
   remainingLife = dragonHealth - damage
   k' = k{knightEndurance = knightEndurance - maxHits}
-  d' = d{dragonHealth = remainingLife}
+  d' = updateStats stats{dragonHealth = remainingLife} d
 
 attackDragon :: Dragon a -> Knight -> AttackResult a
-attackDragon d@Dragon{..} k@Knight{..}
+attackDragon d k@Knight{..}
   | remainingLife <= 0 = Stop KnightDies
   | otherwise = KeepGoing d k'
  where
+  DragonStats{..} = dragonStats d
   remainingLife = knightHealth - dragonFirePower
   k' = k{knightHealth = remainingLife}
 
-{-
-Use GADTs to make illegal states unrepresentable
-
-data DragonType = Red | Green | Black
-data Chest (t :: DragonType) a where
-  GreenChest :: Int -> Chest Green a
-  RedChest :: Int -> a -> Chest Red a
-  BlackChest :: Int -> a -> Chest Black a
-
-data Dragon (t :: DragonType) a = Dragon
-  { dragonFirePower :: Int
-  , dragonHealth :: Int
-  , dragonChest :: Chest t a
-  }
-
-data FightResult a
-  = forall t. KnightWins (Chest t a) Int
-  | KnightDies
-  | KnightRunsAway
-
--- How would I know the specific 't' to get the corresponding experience?
--- Only idea that comes to mind is pattern matching on dragonChest to
--- discover the actual type 't'
-dragonToExperience :: Dragon t a -> Int
-dragonToExperience d = undefined
--}
 ----------------------------------------------------------------------------
 -- Extra Challenges
 ----------------------------------------------------------------------------
@@ -285,12 +275,8 @@ True
 -}
 isIncreasing :: [Int] -> Bool
 isIncreasing [] = True
-isIncreasing (x : xs) = go x xs
- where
-  go _ [] = True
-  go prev (a : as)
-    | prev > a = False
-    | otherwise = go a as
+isIncreasing [_] = True
+isIncreasing (x : y : ys) = x < y && isIncreasing (y : ys)
 
 -- Is it still tail-recursive when using guards?
 
@@ -308,7 +294,8 @@ merge :: [Int] -> [Int] -> [Int]
 merge as [] = as
 merge [] bs = bs
 merge (a : as) (b : bs)
-  | a <= b = a : merge as (b : bs)
+  | a < b = a : merge as (b : bs)
+  | a == b = a : a : merge as bs
   | otherwise = b : merge (a : as) bs
 
 {- | Implement the "Merge Sort" algorithm in Haskell. The @mergeSort@
@@ -328,11 +315,15 @@ The algorithm of merge sort is the following:
 mergeSort :: [Int] -> [Int]
 mergeSort [] = []
 mergeSort [x] = [x]
-mergeSort xs =
-  let (l, r) = splitAt (length xs `div` 2) xs
-      sl = mergeSort l
-      sr = mergeSort r
-   in merge sl sr
+mergeSort xs = uncurry merge $ both mergeSort $ splitHalves xs
+ where
+  both f (a1, a2) = (f a1, f a2)
+
+splitHalves :: [a] -> ([a], [a])
+splitHalves = go [] []
+ where
+  go h1 h2 [] = (h1, h2)
+  go h1 h2 (x : xs) = go h2 (x : h1) xs
 
 {- | Haskell is famous for being a superb language for implementing
 compilers and interpeters to other programming languages. In the next
@@ -416,21 +407,18 @@ Write a function that takes and expression and performs "Constant
 Folding" optimization on the given expression.
 -}
 constantFolding :: Expr -> Expr
-constantFolding e = case extractConstants e of
-  (Just expr, 0) -> expr
-  (Just expr, n) -> Add expr (Lit n)
-  (Nothing, n) -> Lit n
+constantFolding e = case simplify e of
+  ([], n) -> Lit n
+  (vars, 0) -> varsToExpr vars
+  (vars, n) -> Add (varsToExpr vars) (Lit n)
+ where
+  varsToExpr = foldr1 Add . map Var
 
-extractConstants :: Expr -> (Maybe Expr, Int)
-extractConstants = \case
-  Lit n -> (Nothing, n)
-  Var s -> (Just $ Var s, 0)
-  Add e1 e2 ->
-    let (e1', n) = extractConstants e1
-        (e2', n') = extractConstants e2
-     in (combineMaybes Add e1' e2', n + n')
-
-combineMaybes :: (a -> a -> a) -> Maybe a -> Maybe a -> Maybe a
-combineMaybes _ Nothing b = b
-combineMaybes _ a Nothing = a
-combineMaybes f (Just a) (Just b) = Just $ f a b
+simplify :: Expr -> ([String], Int)
+simplify = \case
+  Lit n -> ([], n)
+  Var s -> ([s], 0)
+  Add e1 e2 -> (vs <> vs', n + n')
+   where
+    (vs, n) = simplify e1
+    (vs', n') = simplify e2
