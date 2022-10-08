@@ -142,7 +142,7 @@ parseRow string = do
    [rawProd, rawTradeType, rawCost] <- pure $ splitOn ',' string
    prod <- validate (not . null) rawProd -- product must be a non empty String
    tradeType <- readMaybe rawTradeType -- type is one of the options
-   cost <- readMaybe rawCost >>= validate (> 0) -- cost must be > 0
+   cost <- readMaybe rawCost >>= validate (>= 0) -- cost must be >= 0
    pure $ Row prod tradeType cost
 
 splitOn :: Eq a => a -> [a] -> [[a]]
@@ -291,15 +291,15 @@ you can return string "no value"
 
 displayStats :: Stats -> String
 displayStats Stats{..} = unlines
-   [ "Total positions        :" <> show (getSum statsTotalPositions)
-   , "Total final balance    :" <> show (getMax statsAbsoluteMax)
-   , "Biggest absolute cost  :" <> show (getMax statsAbsoluteMax)
-   , "Smallest absolute cost :" <> show (getMin statsAbsoluteMin)
-   , "Max earning            :" <> maybe "no value" (show . getMax) statsSellMax
-   , "Min earning            :" <> maybe "no value" (show . getMin) statsSellMin
-   , "Max spending           :" <> maybe "no value" (show . getMax) statsBuyMax
-   , "Min spending           :" <> maybe "no value" (show . getMin) statsSellMin
-   , "Longest product name   :" <> show (unMaxLen statsLongest)
+   [ "Total positions        : " <> show (getSum statsTotalPositions)
+   , "Total final balance    : " <> show (getSum statsTotalSum)
+   , "Biggest absolute cost  : " <> show (getMax statsAbsoluteMax)
+   , "Smallest absolute cost : " <> show (getMin statsAbsoluteMin)
+   , "Max earning            : " <> maybe "no value" (show . getMax) statsSellMax
+   , "Min earning            : " <> maybe "no value" (show . getMin) statsSellMin
+   , "Max spending           : " <> maybe "no value" (show . getMax) statsBuyMax
+   , "Min spending           : " <> maybe "no value" (show . getMin) statsBuyMin
+   , "Longest product name   : " <> unMaxLen statsLongest
    ]
 
 {-
