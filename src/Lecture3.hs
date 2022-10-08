@@ -32,6 +32,8 @@ module Lecture3 (
 
 -- VVV If you need to import libraries, do it after this line ... VVV
 import Data.List (nub)
+import Data.List.NonEmpty (NonEmpty ((:|)))
+import Data.Semigroup (sconcat)
 
 -- ^^^ and before this line. Otherwise the test suite might fail  ^^^
 
@@ -50,7 +52,7 @@ data Weekday
   | Friday
   | Saturday
   | Sunday
-  deriving (Show, Eq)
+  deriving (Show, Eq, Bounded, Enum)
 
 {- | Write a function that will display only the first three letters
 of a weekday.
@@ -81,37 +83,6 @@ Tuesday
   would work for **any** enumeration type in Haskell (e.g. 'Bool',
   'Ordering') and not just 'Weekday'?
 -}
-instance Bounded Weekday where
-  minBound :: Weekday
-  minBound = Monday
-
-  maxBound :: Weekday
-  maxBound = Sunday
-
--- In order to not depend on the declaration order I can not let the compiler
--- auto-derive the instance but do it manually
-instance Enum Weekday where
-  toEnum :: Int -> Weekday
-  toEnum = \case
-    1 -> Monday
-    2 -> Tuesday
-    3 -> Wednesday
-    4 -> Thursday
-    5 -> Friday
-    6 -> Saturday
-    7 -> Sunday
-    _ -> error "enum out of bound"
-
-  fromEnum :: Weekday -> Int
-  fromEnum = \case
-    Monday -> 1
-    Tuesday -> 2
-    Wednesday -> 3
-    Thursday -> 4
-    Friday -> 5
-    Saturday -> 6
-    Sunday -> 7
-
 next :: (Eq a, Enum a, Bounded a) => a -> a
 next a = if a == maxBound then minBound else succ a
 
@@ -124,12 +95,7 @@ weekday to the second.
 5
 -}
 daysTo :: Weekday -> Weekday -> Int
-daysTo d1 d2
-  | n2 >= n1 = n2 - n1
-  | otherwise = 7 - (n1 - n2)
- where
-  n1 = fromEnum d1
-  n2 = fromEnum d2
+daysTo d1 d2 = (fromEnum d2 - fromEnum d1) `mod` 7
 
 {-
 
@@ -230,8 +196,10 @@ together only different elements.
 >>> appendDiff3 (Product 2) (Product 3) (Product 3)
 Product {getProduct = 6}
 -}
-appendDiff3 :: (Eq a, Monoid a) => a -> a -> a -> a
-appendDiff3 a b c = mconcat $ nub [a, b, c]
+appendDiff3 :: (Eq a, Semigroup a) => a -> a -> a -> a
+appendDiff3 a b c = case nub [a, b, c] of
+  x : xs -> sconcat (x :| xs)
+  [] -> error "impossible"
 
 {-
 
